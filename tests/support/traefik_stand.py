@@ -30,10 +30,11 @@ from pathlib import Path
 import yaml
 
 _TRAEFIK_IMAGE = "traefik:v3.6"
-# v3.6+ обязателен: до PR traefik/traefik#12256 (вошёл в 3.6.1) докер-провайдер
-# Traefik был жёстко пришит к Docker API 1.24 и падал на Docker Engine 29+
-# ("client version 1.24 is too old") — эмпирически проверено в этой сессии
-# на traefik:v3.5.6 + Docker Engine 29.3.1 перед тем, как остановиться на 3.6.
+# v3.6.1+ обязателен: до этой версии докер-провайдер Traefik был жёстко
+# пришит к Docker API 1.24 и падал на Docker Engine 29+ ("client version
+# 1.24 is too old") — эмпирически проверено в этой сессии на traefik:v3.5.6
+# + Docker Engine 29.3.1 перед тем, как остановиться на 3.6 (сам Traefik
+# начиная с 3.6.1 согласовывает версию Docker API с движком автоматически).
 _BACKEND_IMAGE = "hashicorp/http-echo"
 BACKEND_PORT = 5678
 """Порт, на котором ``hashicorp/http-echo`` слушает внутри контейнера —
