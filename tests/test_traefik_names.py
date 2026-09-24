@@ -6,7 +6,6 @@ from deploycli.traefik_names import (
     COMPOSE_PROJECT_NAME_LITERAL,
     InvalidNameError,
     hsts_handler_name,
-    middleware_name,
     router_priority,
     router_service_name,
     validate_segment,
@@ -73,24 +72,6 @@ def test_hsts_handler_name_builds_ns_dash_hsts() -> None:
 
 def test_hsts_handler_name_accepts_compose_literal_prefix_unchecked() -> None:
     assert hsts_handler_name(COMPOSE_PROJECT_NAME_LITERAL) == f"{COMPOSE_PROJECT_NAME_LITERAL}-hsts"
-
-
-def test_middleware_name_builds_ns_dash_service_dash_handler() -> None:
-    assert middleware_name("ns", "app", "ratelimit") == "ns-app-ratelimit"
-
-
-@pytest.mark.parametrize("name,_reason", INVALID_SEGMENTS)
-def test_middleware_name_rejects_invalid_service(name: str, _reason: str) -> None:
-    with pytest.raises(InvalidNameError) as excinfo:
-        middleware_name("ns", name, "ratelimit")
-    assert name in str(excinfo.value)
-
-
-@pytest.mark.parametrize("name,_reason", INVALID_SEGMENTS)
-def test_middleware_name_rejects_invalid_handler(name: str, _reason: str) -> None:
-    with pytest.raises(InvalidNameError) as excinfo:
-        middleware_name("ns", "app", name)
-    assert name in str(excinfo.value)
 
 
 def test_router_priority_without_path_is_one() -> None:
