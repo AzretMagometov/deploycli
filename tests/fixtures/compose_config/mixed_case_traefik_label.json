@@ -12,9 +12,9 @@
       "entrypoint": null,
       "image": "myapp:legacy",
       "labels": {
-        "com.example.owner": "team-a",
+        "TRAEFIK.HTTP.ROUTERS.LEGACY.RULE": "Host(`legacy.example.com`)",
         "Traefik.enable": "true",
-        "TRAEFIK.HTTP.ROUTERS.LEGACY.RULE": "Host(`legacy.example.com`)"
+        "com.example.owner": "team-a"
       },
       "networks": {
         "default": null
