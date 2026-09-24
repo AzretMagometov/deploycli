@@ -1,0 +1,60 @@
+{
+  "name": "basic-fixture",
+  "networks": {
+    "default": {
+      "name": "basic-fixture_default",
+      "ipam": {}
+    },
+    "proxy": {
+      "name": "proxy",
+      "ipam": {},
+      "external": true
+    }
+  },
+  "services": {
+    "cache": {
+      "command": null,
+      "entrypoint": null,
+      "image": "redis:7",
+      "networks": {
+        "default": null
+      }
+    },
+    "web": {
+      "command": null,
+      "entrypoint": null,
+      "image": "nginx:1.27",
+      "labels": {
+        "com.example.owner": "team-a",
+        "traefik.enable": "true",
+        "traefik.http.routers.web.rule": "Host(`example.com`)"
+      },
+      "networks": {
+        "default": null,
+        "proxy": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "target": 80,
+          "published": "80",
+          "protocol": "tcp"
+        },
+        {
+          "mode": "ingress",
+          "target": 443,
+          "published": "443",
+          "protocol": "tcp"
+        }
+      ]
+    },
+    "worker": {
+      "command": null,
+      "entrypoint": null,
+      "image": "myapp:worker",
+      "networks": {
+        "default": null
+      }
+    }
+  }
+}

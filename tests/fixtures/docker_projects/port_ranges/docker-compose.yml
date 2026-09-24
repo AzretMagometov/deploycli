@@ -1,0 +1,15 @@
+services:
+  worker:
+    image: myapp:worker
+    ports:
+      - "8000-8002:8000-8002"
+
+  edge:
+    image: myapp:edge
+    ports:
+      - "80-81:80-81"
+
+  headless:
+    image: myapp:headless
+    ports:
+      - "80"
