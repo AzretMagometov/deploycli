@@ -82,6 +82,29 @@ def test_reads_services_networks_ports_images_and_traefik_labels(
     assert cache.publishes_edge_port is False
 
 
+# Снято с проекта: единственный сервис legacy несёт метку Traefik в
+# смешанном/верхнем регистре (Traefik читает метки регистронезависимо —
+# ADR-003), плюс посторонюю метку com.example.owner.
+def test_reads_traefik_labels_regardless_of_key_case(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    payload = (FIXTURES / "compose_config" / "mixed_case_traefik_label.json").read_text()
+    _stub_compose_config(monkeypatch, stdout=payload, returncode=0)
+
+    facts = scan_project(tmp_path)
+
+    assert len(facts.services) == 1
+    legacy = facts.services[0]
+    # Ключи хранятся дословно, как их написал автор compose: сообщение об
+    # отказе генерации должно называть метку ровно так, иначе её не найти
+    # поиском по файлу.
+    assert dict(legacy.traefik_labels) == {
+        "Traefik.enable": "true",
+        "TRAEFIK.HTTP.ROUTERS.LEGACY.RULE": "Host(`legacy.example.com`)",
+    }
+    assert "com.example.owner" not in legacy.traefik_labels
+
+
 # Снято с проекта: единственный сервис app публикует 3000 хостовым портом
 # 8080 (80/443 наружу не заняты никем).
 def test_no_service_publishes_edge_port_when_published_ports_are_not_80_or_443(

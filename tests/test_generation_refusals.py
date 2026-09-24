@@ -7,7 +7,9 @@ Golden-файлы в ``tests/fixtures/generation_refusals/*.txt`` фиксиру
 
 from pathlib import Path
 
-from deploycli.compose_facts import ProjectFacts, ServiceFacts
+import pytest
+
+from deploycli.compose_facts import ProjectFacts, ServiceFacts, scan_project
 from deploycli.generation_refusals import (
     GenerationRefused,
     ensure_generation_allowed,
@@ -16,6 +18,7 @@ from deploycli.generation_refusals import (
 from deploycli.traefik_labels import PublicRoute
 
 FIXTURES = Path(__file__).parent / "fixtures" / "generation_refusals"
+COMPOSE_CONFIG_FIXTURES = Path(__file__).parent / "fixtures" / "compose_config"
 
 
 def _golden(name: str) -> tuple[str, ...]:
@@ -112,6 +115,30 @@ def test_foreign_traefik_label_on_any_service_is_refused() -> None:
     facts = ProjectFacts(services=(_service("cache", traefik_labels={"traefik.enable": "true"}),))
 
     assert find_refusals(facts, {}) == _golden("foreign_traefik_label.txt")
+
+
+# Правило 3, регистр: Traefik читает метки регистронезависимо (ADR-003),
+# поэтому метка вида Traefik.enable/TRAEFIK.HTTP.ROUTERS...RULE обязана дойти
+# от `docker compose config` до отказа так же, как и строчная traefik.*.
+# Тест идёт через scan_project (а не через ServiceFacts напрямую), потому что
+# сам баг жил в фильтрации compose_facts — тест, обходящий её, был бы зелёным
+# и до фикса.
+def test_foreign_traefik_label_mixed_case_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = (COMPOSE_CONFIG_FIXTURES / "mixed_case_traefik_label.json").read_text()
+
+    class _FakeCompletedProcess:
+        returncode = 0
+        stdout = payload
+        stderr = ""
+
+    monkeypatch.setattr(
+        "deploycli.compose_facts.subprocess.run",
+        lambda *args, **kwargs: _FakeCompletedProcess(),
+    )
+
+    facts = scan_project(Path("."))
+
+    assert find_refusals(facts, {}) == _golden("foreign_traefik_label_mixed_case.txt")
 
 
 # Правило 4: порт 80/443 либо любой ports: у прикладного сервиса.
