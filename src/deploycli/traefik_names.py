@@ -53,22 +53,9 @@ def hsts_handler_name(namespace: str) -> str:
     """Строит имя единственного в v1 обработчика HSTS: ``<ns>-hsts``.
 
     Обработчик один на весь стек и не привязан к конкретному сервису
-    (ADR-003), поэтому в отличие от :func:`middleware_name` не берёт
-    имени сервиса.
+    (ADR-003).
     """
     return f"{namespace}-hsts"
-
-
-def middleware_name(namespace: str, service: str, handler: str) -> str:
-    """Строит имя будущих per-сервисных обработчиков: ``<ns>-<сервис>-<обработчик>``.
-
-    Форма зарезервирована на будущее (ADR-003); в v1 применяется только
-    :func:`hsts_handler_name`. Оба сегмента, ``service`` и ``handler``,
-    проверяются по алфавиту.
-    """
-    validate_segment(service)
-    validate_segment(handler)
-    return f"{namespace}-{service}-{handler}"
 
 
 def router_priority(path_prefix: str = "") -> int:

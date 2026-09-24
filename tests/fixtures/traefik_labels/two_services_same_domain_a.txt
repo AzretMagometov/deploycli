@@ -1,0 +1,10 @@
+traefik.enable=true
+traefik.docker.network=proxy
+traefik.http.routers.${COMPOSE_PROJECT_NAME}-app-a.rule=Host(`example.com`) && PathPrefix(`/a`)
+traefik.http.routers.${COMPOSE_PROJECT_NAME}-app-a.entrypoints=websecure
+traefik.http.routers.${COMPOSE_PROJECT_NAME}-app-a.tls.certresolver=letsencrypt
+traefik.http.routers.${COMPOSE_PROJECT_NAME}-app-a.priority=102
+traefik.http.routers.${COMPOSE_PROJECT_NAME}-app-a.service=${COMPOSE_PROJECT_NAME}-app-a
+traefik.http.routers.${COMPOSE_PROJECT_NAME}-app-a.middlewares=${COMPOSE_PROJECT_NAME}-hsts
+traefik.http.services.${COMPOSE_PROJECT_NAME}-app-a.loadbalancer.server.port=3000
+traefik.http.middlewares.${COMPOSE_PROJECT_NAME}-hsts.headers.stsSeconds=31536000

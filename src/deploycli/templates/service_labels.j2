@@ -1,0 +1,12 @@
+{%- set multi = domains|length > 1 -%}
+{%- set wrap = multi and path_prefix -%}
+traefik.enable=true
+traefik.docker.network=proxy
+traefik.http.routers.{{ router }}.rule={% if wrap %}({% endif %}{% for domain in domains %}Host(`{{ domain }}`){% if not loop.last %} || {% endif %}{% endfor %}{% if wrap %}){% endif %}{% if path_prefix %} && PathPrefix(`{{ path_prefix }}`){% endif %}
+traefik.http.routers.{{ router }}.entrypoints=websecure
+traefik.http.routers.{{ router }}.tls.certresolver=letsencrypt
+traefik.http.routers.{{ router }}.priority={{ priority }}
+traefik.http.routers.{{ router }}.service={{ router }}
+traefik.http.routers.{{ router }}.middlewares={{ hsts }}
+traefik.http.services.{{ router }}.loadbalancer.server.port={{ port }}
+traefik.http.middlewares.{{ hsts }}.headers.stsSeconds=31536000
