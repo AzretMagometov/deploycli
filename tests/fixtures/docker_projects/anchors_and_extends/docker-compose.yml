@@ -1,0 +1,28 @@
+x-common: &common
+  restart: unless-stopped
+  environment:
+    - APP_ENV=production
+
+services:
+  base:
+    <<: *common
+    image: myapp:base
+    networks:
+      - default
+
+  web:
+    extends:
+      service: base
+    image: myapp:web
+    ports:
+      - "8080:80"
+    networks:
+      - default
+      - proxy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.web.rule: "Host(`example.com`)"
+
+networks:
+  proxy:
+    external: true

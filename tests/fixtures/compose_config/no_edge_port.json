@@ -1,0 +1,31 @@
+{
+  "name": "no-edge-fixture",
+  "networks": {
+    "default": {
+      "name": "no-edge-fixture_default",
+      "ipam": {}
+    }
+  },
+  "services": {
+    "app": {
+      "command": null,
+      "entrypoint": null,
+      "image": "myapp:1.0",
+      "labels": {
+        "traefik.enable": "true",
+        "traefik.http.routers.app.rule": "Host(`app.example.com`)"
+      },
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "target": 3000,
+          "published": "8080",
+          "protocol": "tcp"
+        }
+      ]
+    }
+  }
+}

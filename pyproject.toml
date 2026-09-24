@@ -40,3 +40,7 @@ files = ["src", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "docker: требует настоящий docker с плагином compose в PATH",
+]
