@@ -8,3 +8,6 @@ __pycache__/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Рабочие каталоги сабагентов
+.claude/worktrees/
