@@ -100,9 +100,17 @@ def _service_facts(name: str, definition: Mapping[str, Any]) -> ServiceFacts:
     published_ports = tuple(sorted(_published_ports(definition)))
     traefik_labels = MappingProxyType(
         {
+            # Traefik читает метки регистронезависимо (ADR-003), поэтому
+            # фильтр по префиксу обязан игнорировать регистр — иначе метка
+            # вида `Traefik.enable` в базовом compose проходит мимо фактов и
+            # мимо правила отказа 3, оставаясь незамеченной. Сам ключ в
+            # факты попадает дословно, как его написал автор compose (а не
+            # приведённым к нижнему регистру): сообщение об отказе называет
+            # метку ровно так, как она выглядит у пользователя, чтобы её
+            # можно было найти поиском по файлу.
             key: value
             for key, value in (definition.get("labels") or {}).items()
-            if key.startswith("traefik.")
+            if key.lower().startswith("traefik.")
         }
     )
     return ServiceFacts(
