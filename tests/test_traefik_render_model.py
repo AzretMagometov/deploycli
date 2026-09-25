@@ -34,7 +34,9 @@ def _service_facts(name: str, labels: dict[str, str]) -> ServiceFacts:
 
 def test_parses_single_public_service_into_router_service_and_middleware() -> None:
     route = PublicRoute(domains=("example.com",), port=3000)
-    project = ProjectFacts(services=(_service_facts("web", _labels_for("web", route, "myproj")),))
+    project = ProjectFacts(
+        name="myproj", services=(_service_facts("web", _labels_for("web", route, "myproj")),)
+    )
 
     model = parse_traefik_model(project)
 
@@ -58,7 +60,9 @@ def test_parses_single_public_service_into_router_service_and_middleware() -> No
 
 def test_public_service_compose_view_is_enabled_with_its_own_router() -> None:
     route = PublicRoute(domains=("example.com",), port=3000)
-    project = ProjectFacts(services=(_service_facts("web", _labels_for("web", route, "myproj")),))
+    project = ProjectFacts(
+        name="myproj", services=(_service_facts("web", _labels_for("web", route, "myproj")),)
+    )
 
     model = parse_traefik_model(project)
 
@@ -70,7 +74,7 @@ def test_public_service_compose_view_is_enabled_with_its_own_router() -> None:
 
 def test_non_public_service_has_no_router_and_is_disabled() -> None:
     project = ProjectFacts(
-        services=(_service_facts("worker", _labels_for("worker", None, "myproj")),)
+        name="myproj", services=(_service_facts("worker", _labels_for("worker", None, "myproj")),)
     )
 
     model = parse_traefik_model(project)
@@ -88,10 +92,11 @@ def test_hsts_middleware_repeated_identically_across_services_is_not_a_conflict(
     route_a = PublicRoute(domains=("a.example.com",), port=3000)
     route_b = PublicRoute(domains=("b.example.com",), port=4000)
     project = ProjectFacts(
+        name="myproj",
         services=(
             _service_facts("app-a", _labels_for("app-a", route_a, "myproj")),
             _service_facts("app-b", _labels_for("app-b", route_b, "myproj")),
-        )
+        ),
     )
 
     model = parse_traefik_model(project)
@@ -104,10 +109,11 @@ def test_two_public_services_on_shared_domain_with_and_without_path_prefix() -> 
     plain = PublicRoute(domains=("example.com",), port=3000)
     prefixed = PublicRoute(domains=("example.com",), port=4000, path_prefix="/api")
     project = ProjectFacts(
+        name="myproj",
         services=(
             _service_facts("web", _labels_for("web", plain, "myproj")),
             _service_facts("api", _labels_for("api", prefixed, "myproj")),
-        )
+        ),
     )
 
     model = parse_traefik_model(project)
@@ -121,7 +127,7 @@ def test_missing_enable_label_is_parsed_as_none_not_as_disabled() -> None:
     # Сервис без единой метки traefik.* вовсе (compose_facts фильтрует
     # namespace traefik.* целиком, а не эту метку конкретно) — realистичный
     # случай, если базовый compose проекта не тронут генератором вообще.
-    project = ProjectFacts(services=(_service_facts("cache", {}),))
+    project = ProjectFacts(name="myproj", services=(_service_facts("cache", {}),))
 
     model = parse_traefik_model(project)
 
@@ -133,10 +139,11 @@ def test_conflicting_router_definitions_for_same_name_are_recorded() -> None:
     labels_a = _labels_for("web", PublicRoute(domains=("a.example.com",), port=3000), "myproj")
     labels_b = _labels_for("web", PublicRoute(domains=("b.example.com",), port=3000), "myproj")
     project = ProjectFacts(
+        name="myproj",
         services=(
             _service_facts("first", labels_a),
             _service_facts("second", labels_b),
-        )
+        ),
     )
 
     model = parse_traefik_model(project)

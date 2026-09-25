@@ -1,0 +1,42 @@
+name: safe-read-fixture
+
+services:
+  web:
+    build:
+      context: .
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=Host(`${WEB_DOMAIN}`)"
+      - "com.example.owner=team-a"
+    ports:
+      - "8080:80"
+    networks:
+      - default
+      - proxy
+    volumes:
+      - dbdata:/var/lib/data
+      - ./landing:/usr/share/nginx/html:ro
+    env_file:
+      - path: ./app.env
+        required: true
+      - path: ./optional.env
+        required: false
+
+  backend:
+    image: ${IMAGE_REGISTRY:-git.example.com/org}/direct-ai-backend:${BACKEND_TAG:?задайте тег образа}
+    labels:
+      traefik.enable: "false"
+      com.example.owner: team-b
+
+  cache:
+    image: redis:7
+    profiles:
+      - tools
+
+networks:
+  default:
+  proxy:
+    external: true
+
+volumes:
+  dbdata:

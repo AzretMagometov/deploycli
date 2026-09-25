@@ -1,0 +1,19 @@
+{
+  "name": "unparsed-port-fixture",
+  "networks": {
+    "default": {
+      "name": "unparsed-port-fixture_default"
+    }
+  },
+  "services": {
+    "web": {
+      "image": "nginx:1.27",
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        "abc:80"
+      ]
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "range-long-form",
+  "networks": {
+    "default": {
+      "name": "range-long-form_default"
+    }
+  },
+  "services": {
+    "app": {
+      "image": "nginx:1.27",
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "protocol": "tcp",
+          "published": "8000-8002",
+          "target": 8000
+        }
+      ]
+    }
+  }
+}

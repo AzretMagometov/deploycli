@@ -1,0 +1,31 @@
+{
+  "name": "refusals-together-fixture",
+  "networks": {
+    "default": {
+      "name": "refusals-together-fixture_default"
+    }
+  },
+  "services": {
+    "app": {
+      "env_file": [
+        {
+          "path": "/projects/app/absent.env",
+          "required": true
+        }
+      ],
+      "image": "busybox:1.36",
+      "networks": {
+        "default": null
+      }
+    },
+    "web": {
+      "image": "nginx:1.27",
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        "${DEV_PORT}:3000"
+      ]
+    }
+  }
+}

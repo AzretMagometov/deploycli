@@ -1,0 +1,21 @@
+{
+  "name": "bare-label-fixture",
+  "networks": {
+    "default": {
+      "name": "bare-label-fixture_default"
+    }
+  },
+  "services": {
+    "legacy": {
+      "image": "myapp:legacy",
+      "labels": [
+        "traefik.enable",
+        "traefik.http.routers.legacy.rule=Host(`legacy.example.com`)",
+        "com.example.owner=team-a"
+      ],
+      "networks": {
+        "default": null
+      }
+    }
+  }
+}
