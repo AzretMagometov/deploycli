@@ -1,0 +1,380 @@
+#!/usr/bin/env bash
+# Подготовка хоста под деплой стека {{ stack }} — собрано deploycli (ADR-006).
+#
+# Скрипт доводит машину до состояния, в котором деплой возможен: docker с
+# плагином compose, внешняя сеть края хоста, деплой-пользователь без sudo в
+# группе docker, каталог стека в его собственности{% if with_edge %} и сам край хоста{% endif %}.
+#
+# Чего скрипт НЕ делает: не настраивает брандмауэр, fail2ban, доступ по SSH и
+# автообновления. Он их читает и печатает отчёт, не трогая ни одного правила.
+#
+# Повторный запуск безопасен: скрипт молчит о том, что уже верно, и печатает
+# список изменённого. Сначала собираются все препятствия разом, и только на
+# чистом списке начинаются изменения — прогон не бросает машину на полпути.
+#
+# Запуск: deploycli prepare-host ... | ssh <хост> sudo bash -s
+set -euo pipefail
+
+STACK={{ stack|sh }}
+DEPLOY_USER={{ deploy_user|sh }}
+STACK_DIR={{ stack_dir|sh }}
+EDGE_NETWORK={{ edge_network|sh }}
+EDGE_PROJECT={{ edge_project|sh }}
+WITH_EDGE={{ 'yes' if with_edge else 'no' }}
+DOCKER_PACKAGES=(docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)
+DOCKER_KEY_URL='https://download.docker.com/linux/ubuntu/gpg'
+DOCKER_KEYRING='/etc/apt/keyrings/docker.asc'
+DOCKER_SOURCES='/etc/apt/sources.list.d/docker.sources'
+
+refusals=()
+changes=()
+{% if with_edge %}
+EDGE_DIR={{ edge_project_dir|sh }}
+EDGE_COMPOSE={{ edge_compose_path|sh }}
+
+# Compose края хоста собран тем же шаблоном, которым документация комплекта
+# печатает рабочий пример (ADR-014): один шаблон, два потребителя.
+edge_compose() {
+  cat <<'DPC_EDGE_COMPOSE'
+{{ edge_compose }}DPC_EDGE_COMPOSE
+}
+{% raw %}
+edge_containers() {
+  docker ps --filter "label=com.docker.compose.project=$EDGE_PROJECT" --format '{{.Names}}'
+}
+
+file_hash() {
+  sha256sum "$1" 2>/dev/null | cut -d' ' -f1 || true
+}
+
+ensure_edge() {
+  local want rewritten=no
+  want=$(mktemp)
+  edge_compose >"$want"
+  if [ "$(file_hash "$want")" != "$(file_hash "$EDGE_COMPOSE")" ]; then
+    install -d -m 0755 "$EDGE_DIR"
+    install -m 0644 "$want" "$EDGE_COMPOSE"
+    note_change "записан compose края хоста '$EDGE_COMPOSE'"
+    rewritten=yes
+  fi
+  rm -f "$want"
+  if [ "$rewritten" = yes ] || [ -z "$(edge_containers)" ]; then
+    docker compose -f "$EDGE_COMPOSE" up -d
+    note_change "край хоста поднят: точки входа 80 и 443, сеть '$EDGE_NETWORK'"
+  fi
+}
+{% endraw %}
+{% endif %}
+{% raw %}
+have() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+refuse() {
+  refusals+=("$1")
+}
+
+note_change() {
+  changes+=("$1")
+}
+
+die() {
+  printf 'Подготовка хоста прервана: %s\n' "$1" >&2
+  exit 1
+}
+
+# --- препятствия: собираются все разом, до первого изменения ------------------
+
+collect_refusals() {
+  if [ "$(id -u)" != 0 ]; then
+    refuse "подготовка меняет машину и запускается от root: подайте скрипт как 'ssh <хост> sudo bash -s'"
+  fi
+  if ! have ss; then
+    refuse "команды ss (пакет iproute2) на машине нет, а без неё не видно, кто занял порты 80 и 443"
+  fi
+  if have docker; then
+    if ! docker info >/dev/null 2>&1; then
+      refuse "docker установлен, но его демон не отвечает; подготовка не запускает остановленный демон — разберитесь с ним и повторите прогон"
+    fi
+  elif ! have apt-get; then
+    refuse "docker не установлен, а apt-get на машине нет: подготовка ставит docker только на машинах с apt"
+  fi
+  check_edge_ports
+  check_edge_network
+  check_deploy_user_privileges
+}
+
+check_edge_ports() {
+  local listeners port
+  listeners=''
+  if have ss; then
+    listeners=$(ss -H -ltnp 2>/dev/null || true)
+  fi
+  for port in 80 443; do
+    check_port_owner "$port" "$(port_listener "$port" "$listeners")"
+  done
+}
+
+port_listener() {
+  printf '%s\n' "$2" | awk -v port="$1" '{ n = split($4, a, ":"); if (a[n] == port) print }' |
+    head -n1
+}
+
+# Владельца порта сначала спрашивают у docker и только потом у ss: при
+# выключенном userland-прокси опубликованный контейнером порт слушающим
+# процессом не выглядит вовсе, а занят всё равно.
+check_port_owner() {
+  local port=$1 line=$2 container ours neighbour
+  container=''
+  if have docker; then
+    container=$(docker ps --filter "publish=$port" --format '{{.Names}}' | head -n1)
+  fi
+  if [ -n "$container" ]; then
+    ours=$(docker ps --filter "publish=$port" \
+      --filter "label=com.docker.compose.project=$EDGE_PROJECT" --format '{{.Names}}' | head -n1)
+    if [ -n "$ours" ]; then
+      return 0
+    fi
+    neighbour=$(docker ps --filter "publish=$port" --filter "network=$EDGE_NETWORK" \
+      --format '{{.Names}}' | head -n1)
+    if [ -z "$neighbour" ]; then
+      refuse "порт $port занят контейнером '$container', и это не край хоста: вынесите его с портов 80 и 443 — край хоста занимает их целиком"
+    elif [ "$WITH_EDGE" = yes ]; then
+      refuse "порт $port занят контейнером '$container' в сети '$EDGE_NETWORK' — это чужой край хоста, и второго на машине не бывает: остановите его или запустите подготовку без флага края"
+    fi
+    return 0
+  fi
+  if [ -n "$line" ]; then
+    refuse "порт $port занят процессом '$(port_process "$line")', и это не край хоста: вынесите его с портов 80 и 443 — край хоста занимает их целиком"
+  fi
+}
+
+port_process() {
+  local name
+  name=$(printf '%s' "$1" | sed -n 's/.*users:(("\([^"]*\)".*/\1/p')
+  printf '%s' "${name:-$1}"
+}
+
+check_edge_network() {
+  local driver
+  if ! have docker; then
+    return 0
+  fi
+  driver=$(docker network inspect "$EDGE_NETWORK" --format '{{.Driver}}' 2>/dev/null || true)
+  if [ -n "$driver" ] && [ "$driver" != bridge ]; then
+    refuse "сеть '$EDGE_NETWORK' на машине есть, но её драйвер '$driver', а контракт с хостом требует bridge: подготовка чужую сеть не пересоздаёт — отцепите от неё контейнеры и удалите её сами"
+  fi
+}
+
+check_deploy_user_privileges() {
+  if ! id -u "$DEPLOY_USER" >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! have sudo; then
+    return 0
+  fi
+  if sudo -n -l -U "$DEPLOY_USER" >/dev/null 2>&1; then
+    refuse "у пользователя '$DEPLOY_USER' есть права sudo, а деплой-пользователь заводится без них: подготовка привилегий не отбирает — снимите их сами и повторите прогон"
+  fi
+}
+
+# --- изменения ----------------------------------------------------------------
+
+ensure_docker() {
+  if docker compose version >/dev/null 2>&1; then
+    return 0
+  fi
+  install_docker
+  if ! docker compose version >/dev/null 2>&1; then
+    die "docker с плагином compose не отвечает и после установки: посмотрите вывод apt выше"
+  fi
+  note_change "установлен docker с плагином compose"
+}
+
+install_docker() {
+  local codename
+  codename=$(os_codename)
+  if [ -z "$codename" ]; then
+    die "выпуск системы не прочитан из /etc/os-release, а без его имени неоткуда брать пакеты docker"
+  fi
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y ca-certificates curl
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL "$DOCKER_KEY_URL" -o "$DOCKER_KEYRING"
+  chmod a+r "$DOCKER_KEYRING"
+  docker_apt_source "$codename" | tee "$DOCKER_SOURCES" >/dev/null
+  apt-get update
+  apt-get install -y "${DOCKER_PACKAGES[@]}"
+  systemctl enable --now docker
+}
+
+docker_apt_source() {
+  cat <<DPC_DOCKER_SOURCE
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $1
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: $DOCKER_KEYRING
+DPC_DOCKER_SOURCE
+}
+
+os_codename() {
+  local release codename
+  release=$(cat /etc/os-release 2>/dev/null || true)
+  codename=$(printf '%s\n' "$release" | sed -n 's/^UBUNTU_CODENAME=//p' | tr -d '"' | head -n1)
+  if [ -z "$codename" ]; then
+    codename=$(printf '%s\n' "$release" | sed -n 's/^VERSION_CODENAME=//p' | tr -d '"' | head -n1)
+  fi
+  printf '%s' "$codename"
+}
+
+ensure_edge_network() {
+  if docker network inspect "$EDGE_NETWORK" >/dev/null 2>&1; then
+    return 0
+  fi
+  docker network create "$EDGE_NETWORK" >/dev/null
+  note_change "создана внешняя сеть края хоста '$EDGE_NETWORK'"
+}
+
+ensure_deploy_user() {
+  if ! id -u "$DEPLOY_USER" >/dev/null 2>&1; then
+    useradd --create-home --shell /bin/bash "$DEPLOY_USER"
+    note_change "заведён деплой-пользователь '$DEPLOY_USER' без прав sudo"
+  fi
+  if ! getent group docker >/dev/null 2>&1; then
+    die "группы docker нет даже после установки docker: без неё деплой-пользователь не дотянется до демона"
+  fi
+  if ! id -nG "$DEPLOY_USER" | tr ' ' '\n' | grep -qx docker; then
+    usermod -aG docker "$DEPLOY_USER"
+    note_change "пользователь '$DEPLOY_USER' добавлен в группу docker"
+  fi
+}
+
+ensure_stack_dir() {
+  local owner group
+  owner=$(stat -c '%U' "$STACK_DIR" 2>/dev/null || true)
+  group=$(id -gn "$DEPLOY_USER")
+  if [ -z "$owner" ]; then
+    install -d -o "$DEPLOY_USER" -g "$group" -m 0755 "$STACK_DIR"
+    note_change "создан каталог стека '$STACK_DIR' во владении '$DEPLOY_USER'"
+  elif [ "$owner" != "$DEPLOY_USER" ]; then
+    chown "$DEPLOY_USER:$group" "$STACK_DIR"
+    note_change "владельцем каталога стека '$STACK_DIR' стал '$DEPLOY_USER'"
+  fi
+}
+
+# --- отчёты -------------------------------------------------------------------
+
+report_hygiene() {
+  printf '\nГигиена машины — подготовка её не настраивает и ни одного правила не меняет:\n'
+  printf '  Брандмауэр: %s\n' "$(hygiene_firewall)"
+  printf '  fail2ban: %s\n' "$(hygiene_fail2ban)"
+  printf '  Доступ по SSH: %s\n' "$(hygiene_ssh)"
+  printf '  Автообновления: %s\n' "$(hygiene_unattended_upgrades)"
+}
+
+hygiene_firewall() {
+  local status
+  if ! have ufw; then
+    printf '%s' 'ufw не установлен; брандмауэры помимо ufw подготовка не читает'
+    return 0
+  fi
+  status=$(ufw status 2>/dev/null | sed -n 's/^Status: //p' | head -n1)
+  case "$status" in
+  active) printf '%s' 'ufw установлен и активен' ;;
+  inactive) printf '%s' 'ufw установлен, но неактивен' ;;
+  *) printf '%s' 'ufw установлен, состояние прочитать не удалось' ;;
+  esac
+}
+
+hygiene_fail2ban() {
+  local state
+  state=$(systemctl is-active fail2ban 2>/dev/null || true)
+  if [ "$state" != active ]; then
+    if have fail2ban-client; then
+      printf '%s' 'установлен, служба неактивна'
+    else
+      printf '%s' 'не установлен'
+    fi
+    return 0
+  fi
+  if have fail2ban-client && fail2ban-client status sshd >/dev/null 2>&1; then
+    printf '%s' 'активен, правило для sshd есть'
+  else
+    printf '%s' 'активен, но правила для sshd нет'
+  fi
+}
+
+hygiene_ssh() {
+  local dump root_login password_auth
+  dump=$(sshd -T 2>/dev/null || true)
+  if [ -z "$dump" ]; then
+    printf '%s' 'настройки sshd прочитать не удалось'
+    return 0
+  fi
+  root_login=$(printf '%s\n' "$dump" | sed -n 's/^permitrootlogin //p' | head -n1)
+  password_auth=$(printf '%s\n' "$dump" | sed -n 's/^passwordauthentication //p' | head -n1)
+  printf 'вход root — %s, вход по паролю — %s' \
+    "${root_login:-состояние неизвестно}" "${password_auth:-состояние неизвестно}"
+}
+
+hygiene_unattended_upgrades() {
+  local state
+  state=$(systemctl is-enabled unattended-upgrades 2>/dev/null || true)
+  case "$state" in
+  enabled*) printf '%s' 'unattended-upgrades установлен, служба включена' ;;
+  disabled*) printf '%s' 'unattended-upgrades установлен, служба выключена' ;;
+  *) printf '%s' 'unattended-upgrades не установлен' ;;
+  esac
+}
+
+any_refusals() {
+  [ ${#refusals[@]} -gt 0 ]
+}
+
+report_refusals() {
+  local refusal
+  printf 'Подготовка хоста не начата, машина к ней не готова:\n' >&2
+  for refusal in "${refusals[@]}"; do
+    printf '  - %s\n' "$refusal" >&2
+  done
+  printf 'Ни одного изменения не сделано.\n' >&2
+}
+
+report_changes() {
+  local change
+  if [ ${#changes[@]} -eq 0 ]; then
+    printf '\nИзменений нет: машина уже отвечает требованиям подготовки.\n'
+    return 0
+  fi
+  printf '\nИзменено:\n'
+  for change in "${changes[@]}"; do
+    printf '  - %s\n' "$change"
+  done
+}
+{% endraw %}
+
+main() {
+  printf 'Подготовка хоста: стек %s, каталог %s, деплой-пользователь %s.\n' \
+    "$STACK" "$STACK_DIR" "$DEPLOY_USER"
+  collect_refusals
+  if any_refusals; then
+    report_refusals
+    return 1
+  fi
+  ensure_docker
+  ensure_edge_network
+  ensure_deploy_user
+  ensure_stack_dir
+{% if with_edge %}
+  ensure_edge
+{% endif %}
+  report_hygiene
+  report_changes
+}
+
+# Тело скрипта целиком разобрано до первой команды: скрипт приезжает по
+# stdin ('bash -s'), и любой читающий stdin потомок иначе съел бы его остаток.
+main "$@"

@@ -2,6 +2,8 @@
 
 import argparse
 
+from deploycli.host_prep import add_prepare_host_parser
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -15,11 +17,17 @@ def _build_parser() -> argparse.ArgumentParser:
             "появятся в следующих задачах."
         ),
     )
+    subparsers = parser.add_subparsers(dest="command")
+    add_prepare_host_parser(subparsers)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
-    parser.parse_args(argv)
-    parser.print_help()
-    return 0
+    args = parser.parse_args(argv)
+    run = getattr(args, "run", None)
+    if run is None:
+        parser.print_help()
+        return 0
+    exit_code: int = run(args)
+    return exit_code
