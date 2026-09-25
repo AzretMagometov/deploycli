@@ -1,0 +1,18 @@
+version: 0.1.0
+forge: 5
+contours: test
+auto_contour: 3
+profiles:
+  - tools
+  - 7
+migration: alembic upgrade head
+services:
+  api:
+    public:
+      port: "8000"
+      domain_variable: API_DOMAIN
+    built: "yes"
+paths:
+  deploy/deploy.sh:
+    sha256: 12345
+    version: 0.1.0

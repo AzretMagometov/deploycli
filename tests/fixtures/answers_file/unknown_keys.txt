@@ -1,0 +1,4 @@
+Неизвестный ключ 'contour' в корне файла ответов .deploycli.yml: допустимые ключи — auto_contour, backup, contours, forge, migration, paths, profiles, services, version. Уберите ключ или исправьте опечатку в его имени.
+Неизвестный ключ 'publik' в записи сервиса 'api' файла ответов .deploycli.yml: допустимые ключи — built, public. Уберите ключ или исправьте опечатку в его имени.
+Неизвестный ключ 'domain' в маршруте сервиса 'api' файла ответов .deploycli.yml: допустимые ключи — domain_variable, path_prefix, port. Уберите ключ или исправьте опечатку в его имени.
+Неизвестный ключ 'hash' в записи пути 'deploy/deploy.sh' файла ответов .deploycli.yml: допустимые ключи — sha256, version. Уберите ключ или исправьте опечатку в его имени.

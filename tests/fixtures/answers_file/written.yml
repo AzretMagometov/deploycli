@@ -1,0 +1,34 @@
+# Файл ответов deploycli: вход генератора, а не его выход.
+# Править руками законно — это штатный способ поменять ответ.
+# Прогон переписывает файл целиком: комментарии и порядок ключей не сохраняются.
+version: {{version}}
+forge: forgejo
+contours:
+  - test
+  - prod
+auto_contour: test
+profiles:
+  - tools
+migration:
+  service: api
+  command: alembic upgrade head
+backup:
+  service: db
+  command: pg_dump -U app app
+services:
+  api:
+    public:
+      port: 8000
+      domain_variable: API_DOMAIN
+      path_prefix: /api
+    built: true
+  db:
+    public: false
+    built: false
+paths:
+  .forgejo/workflows/deploy.yml:
+    sha256: 8d3fb39ce523c6fc1dafec39102aef44e599f72fc3a22cf4c95612234571a570
+    version: 0.1.0
+  deploy/deploy.sh:
+    sha256: c6f1676734b35a3c26274cdcdedc4a34ead3d0b815ab6d06afd4a58a55baf13c
+    version: 0.1.0

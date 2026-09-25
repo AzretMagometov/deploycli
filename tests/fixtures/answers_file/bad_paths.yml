@@ -1,0 +1,13 @@
+version: 0.1.0
+paths:
+  /etc/passwd:
+    sha256: 8d3fb39ce523c6fc1dafec39102aef44e599f72fc3a22cf4c95612234571a570
+    version: 0.1.0
+  ../outside.yml:
+    sha256: 8d3fb39ce523c6fc1dafec39102aef44e599f72fc3a22cf4c95612234571a570
+    version: 0.1.0
+  deploy/deploy.sh:
+    sha256: deadbeef
+  deploy/preflight.sh:
+    sha256: 8d3fb39ce523c6fc1dafec39102aef44e599f72fc3a22cf4c95612234571a570
+    version: вчера
