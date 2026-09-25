@@ -1,0 +1,5 @@
+version: 0.1.0
+contours:
+  - test
+  - prod
+auto_contour: stage

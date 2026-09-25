@@ -1,0 +1,10 @@
+version: 0.1.0
+services:
+  api:
+    public: true
+  db:
+    built: false
+  web:
+    public:
+      path_prefix: /w
+    built: true

@@ -1,0 +1,15 @@
+version: 0.1.0
+contour: test
+services:
+  api:
+    public:
+      port: 8000
+      domain_variable: API_DOMAIN
+      domain: api.example.com
+    built: true
+    publik: false
+paths:
+  deploy/deploy.sh:
+    hash: c6f1676734b35a3c26274cdcdedc4a34ead3d0b815ab6d06afd4a58a55baf13c
+    sha256: c6f1676734b35a3c26274cdcdedc4a34ead3d0b815ab6d06afd4a58a55baf13c
+    version: 0.1.0
