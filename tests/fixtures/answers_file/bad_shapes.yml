@@ -1,0 +1,8 @@
+version: 0.1.0
+services:
+  api: 5
+  web:
+    public: 8000
+    built: true
+paths:
+  deploy/deploy.sh: тут был хеш

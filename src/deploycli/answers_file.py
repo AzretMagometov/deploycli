@@ -47,12 +47,18 @@
    dpc-tm3.45 (она же сверяет имя сервиса с моделью проекта — здесь
    проекта нет, есть только файл).
 
-Отказов на файле ответов четыре, и ни один не молчит: версия новее
-установленной, версия ниже порога читаемости, отсутствующий ключ версии
-(все три — ADR-015) и неизвестный ключ (ADR-010). Версия проверяется
-первой и в одиночку: у файла чужой схемы нельзя осмысленно разобрать
-ключи. Всё остальное проверяется разом, как и отказы генерации, — человек
-должен узнать полный список за один прогон.
+Отказов на файле ответов три: версия новее установленной и неизвестный
+ключ (ADR-010), версия ниже порога читаемости (ADR-015). Отсутствующий
+ключ версии отказывает тем же голосом: подставить сегодняшнюю версию
+молча — единственный способ получить подмену схемы. Тем же голосом
+отказывают и остальные способы прочитать файл не тем, чем он записан:
+значение не того типа (YAML молча читает ``1.10`` числом ``1.1``, а
+``"8000"`` — строкой), неполная запись сервиса или пути и повторённый в
+одном отображении ключ.
+
+Версия проверяется первой и в одиночку: у файла чужой схемы нельзя
+осмысленно разобрать ключи. Всё остальное проверяется разом, как и отказы
+генерации, — человек должен узнать полный список за один прогон.
 
 Что этот модуль намеренно НЕ проверяет: грамматику имени переменной
 домена (dpc-tm3.50), грамматику имён контуров (dpc-tm3.60), существование
@@ -62,7 +68,7 @@
 
 import hashlib
 import re
-from collections.abc import Mapping
+from collections.abc import Hashable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from importlib.metadata import version as _distribution_version
@@ -199,6 +205,38 @@ class AnswersFileRefused(Exception):
         self.messages = messages
 
 
+class _DuplicateKey(yaml.YAMLError):
+    """Ключ повторён в одном отображении файла ответов."""
+
+    def __init__(self, key: str, line: int) -> None:
+        super().__init__(f"повторённый ключ '{key}' в строке {line}")
+        self.key = key
+        self.line = line
+
+
+class _StrictLoader(yaml.SafeLoader):
+    """SafeLoader, который отказывает на повторённом ключе.
+
+    YAML разрешает повторить ключ и молча оставляет последнее значение.
+    Файл ответов правят руками, поэтому две строки ``auto_contour:``
+    вместо одной — вероятная правка, а не экзотика, и узнать о ней из
+    поведения генератора человек не должен: ADR-010 требует называть
+    ключ вслух там, где иначе получилось бы молчаливое игнорирование.
+    """
+
+    def construct_mapping(self, node: yaml.MappingNode, deep: bool = False) -> dict[Any, Any]:
+        seen: set[Any] = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if not isinstance(key, Hashable):
+                # Нехешируемый ключ — отказ самого SafeLoader, не этот.
+                continue
+            if key in seen:
+                raise _DuplicateKey(str(key), key_node.start_mark.line + 1)
+            seen.add(key)
+        return super().construct_mapping(node, deep)
+
+
 def installed_version() -> Version:
     """Версия установленного deploycli — единственный источник правды (ADR-015)."""
     return Version(_distribution_version("deploycli"))
@@ -244,7 +282,15 @@ def read_answers(path: Path) -> AnswersFile:
     """
     text = path.read_text(encoding="utf-8")
     try:
-        payload = yaml.safe_load(text)
+        payload = yaml.load(text, Loader=_StrictLoader)
+    except _DuplicateKey as error:
+        raise AnswersFileRefused(
+            (
+                f"Ключ '{error.key}' в файле ответов {ANSWERS_FILE_NAME} повторён в "
+                f"одном отображении (строка {error.line}): YAML оставил бы последнее "
+                "значение молча. Уберите лишнюю строку.",
+            )
+        ) from error
     except yaml.YAMLError as error:
         raise AnswersFileRefused(
             (f"Файл ответов {ANSWERS_FILE_NAME} не разбирается как YAML: {error}",)

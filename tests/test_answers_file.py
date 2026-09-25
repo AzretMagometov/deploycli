@@ -169,8 +169,17 @@ def test_incomplete_service_records_are_refused() -> None:
     assert _refusal("incomplete_services.yml") == _golden_messages("incomplete_services.txt")
 
 
+def test_records_of_wrong_shape_are_refused() -> None:
+    assert _refusal("bad_shapes.yml") == _golden_messages("bad_shapes.txt")
+
+
 def test_path_records_outside_project_and_broken_fields_are_refused() -> None:
     assert _refusal("bad_paths.yml") == _golden_messages("bad_paths.txt")
+
+
+# Правка руками может повторить ключ — YAML оставил бы последний молча.
+def test_key_repeated_in_one_mapping_is_refused_with_its_name_and_line() -> None:
+    assert _refusal("duplicate_key.yml") == _golden_messages("duplicate_key.txt")
 
 
 # ADR-013: auto_contour обязан называть контур из списка.
