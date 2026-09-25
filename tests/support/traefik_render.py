@@ -7,23 +7,29 @@
 ``COMPOSE_PROJECT_NAME`` и разбор меток обратно в модель роутеров, сервисов
 и обработчиков Traefik.
 
-Запуск ``docker compose config`` не дублируется: рендер делает
-:func:`deploycli.compose_facts.scan_project`, эта оснастка только временно
-подставляет ``COMPOSE_PROJECT_NAME`` в окружение перед вызовом.
+Рендер здесь идёт СВОИМ запуском ``docker compose config`` — с
+интерполяцией и с подставленным ``COMPOSE_PROJECT_NAME``. Сканер проекта
+читает чужой проект единственным режимом — безопасным, без интерполяции
+(ADR-011), и в нём ``${COMPOSE_PROJECT_NAME}`` в имени роутера остался бы
+литералом. Здесь же проверяется СГЕНЕРИРОВАННОЕ: метки должны дойти до
+Traefik ровно в том виде, в каком их соберёт compose на хосте (ADR-003),
+поэтому подстановка обязательна. Разбор ответа в факты переиспользован у
+:func:`deploycli.compose_facts.facts_from_config`.
 """
 
-import contextlib
+import json
 import os
 import re
+import subprocess
 from collections import defaultdict
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
 import yaml
 
-from deploycli.compose_facts import ProjectFacts, scan_project
+from deploycli.compose_facts import ProjectFacts, facts_from_config
 
 _ROUTER_ATTR = re.compile(r"^traefik\.http\.routers\.([^.]+)\.(.+)$")
 _SERVICE_PORT = re.compile(r"^traefik\.http\.services\.([^.]+)\.loadbalancer\.server\.port$")
@@ -159,13 +165,19 @@ def render_traefik_model(project_dir: Path, project_name: str) -> TraefikModel:
 
     ``project_name`` подставляется как ``COMPOSE_PROJECT_NAME`` — то же имя
     переменной, которым в реальном контуре разводит стеки ``.env``
-    (ADR-003). Сам запуск ``docker compose config`` переиспользует
-    :func:`deploycli.compose_facts.scan_project`, второй такой вызов здесь
-    не заводится.
+    (ADR-003).
     """
-    with _compose_project_name(project_name):
-        facts = scan_project(project_dir)
-    return parse_traefik_model(facts)
+    result = subprocess.run(
+        ["docker", "compose", "config", "--format", "json"],
+        cwd=project_dir,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "COMPOSE_PROJECT_NAME": project_name},
+        check=False,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"docker compose config не отрендерил проект: {result.stderr}")
+    return parse_traefik_model(facts_from_config(json.loads(result.stdout)))
 
 
 def write_compose_project(project_dir: Path, services: Mapping[str, Sequence[str]]) -> None:
@@ -184,19 +196,6 @@ def write_compose_project(project_dir: Path, services: Mapping[str, Sequence[str
         }
     }
     (project_dir / "docker-compose.yml").write_text(yaml.safe_dump(compose, sort_keys=False))
-
-
-@contextlib.contextmanager
-def _compose_project_name(value: str) -> Iterator[None]:
-    previous = os.environ.get("COMPOSE_PROJECT_NAME")
-    os.environ["COMPOSE_PROJECT_NAME"] = value
-    try:
-        yield
-    finally:
-        if previous is None:
-            os.environ.pop("COMPOSE_PROJECT_NAME", None)
-        else:
-            os.environ["COMPOSE_PROJECT_NAME"] = previous
 
 
 def _group_by_name(

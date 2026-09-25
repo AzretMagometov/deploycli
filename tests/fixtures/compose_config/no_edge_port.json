@@ -2,14 +2,11 @@
   "name": "no-edge-fixture",
   "networks": {
     "default": {
-      "name": "no-edge-fixture_default",
-      "ipam": {}
+      "name": "no-edge-fixture_default"
     }
   },
   "services": {
     "app": {
-      "command": null,
-      "entrypoint": null,
       "image": "myapp:1.0",
       "labels": {
         "traefik.enable": "true",
@@ -21,9 +18,9 @@
       "ports": [
         {
           "mode": "ingress",
-          "target": 3000,
+          "protocol": "tcp",
           "published": "8080",
-          "protocol": "tcp"
+          "target": 3000
         }
       ]
     }

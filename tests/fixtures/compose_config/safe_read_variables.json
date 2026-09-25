@@ -1,0 +1,20 @@
+{
+    "BACKEND_TAG": {
+        "Name": "BACKEND_TAG",
+        "DefaultValue": "",
+        "PresenceValue": "",
+        "Required": true
+    },
+    "IMAGE_REGISTRY": {
+        "Name": "IMAGE_REGISTRY",
+        "DefaultValue": "git.example.com/org",
+        "PresenceValue": "",
+        "Required": false
+    },
+    "WEB_DOMAIN": {
+        "Name": "WEB_DOMAIN",
+        "DefaultValue": "",
+        "PresenceValue": "",
+        "Required": false
+    }
+}

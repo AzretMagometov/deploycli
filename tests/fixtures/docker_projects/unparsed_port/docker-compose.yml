@@ -1,0 +1,7 @@
+name: unparsed-port-fixture
+
+services:
+  web:
+    image: nginx:1.27
+    ports:
+      - "abc:80"

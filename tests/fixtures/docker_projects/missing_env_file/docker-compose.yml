@@ -1,0 +1,10 @@
+name: missing-env-file-fixture
+
+services:
+  app:
+    image: busybox:1.36
+    env_file:
+      - path: ./absent.env
+        required: true
+      - path: ./optional-absent.env
+        required: false

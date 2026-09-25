@@ -1,5 +1,5 @@
 services:
   web:
     image: nginx:alpine
-    networks:
-      - missing-network
+     ports:
+      - "80:80"

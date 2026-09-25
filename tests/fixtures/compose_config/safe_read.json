@@ -1,0 +1,88 @@
+{
+  "name": "safe-read-fixture",
+  "networks": {
+    "default": {
+      "name": "safe-read-fixture_default"
+    },
+    "proxy": {
+      "external": true,
+      "name": "proxy"
+    }
+  },
+  "services": {
+    "backend": {
+      "image": "${IMAGE_REGISTRY:-git.example.com/org}/direct-ai-backend:${BACKEND_TAG:?задайте тег образа}",
+      "labels": {
+        "com.example.owner": "team-b",
+        "traefik.enable": "false"
+      },
+      "networks": {
+        "default": null
+      }
+    },
+    "cache": {
+      "image": "redis:7",
+      "networks": {
+        "default": null
+      },
+      "profiles": [
+        "tools"
+      ]
+    },
+    "web": {
+      "build": {
+        "context": "/projects/app",
+        "dockerfile": "Dockerfile"
+      },
+      "env_file": [
+        {
+          "path": "/projects/app/app.env",
+          "required": true
+        },
+        {
+          "path": "/projects/app/optional.env",
+          "required": false
+        }
+      ],
+      "labels": [
+        "traefik.enable=true",
+        "traefik.http.routers.web.rule=Host(`${WEB_DOMAIN}`)",
+        "com.example.owner=team-a"
+      ],
+      "networks": {
+        "default": null,
+        "proxy": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "protocol": "tcp",
+          "published": "8080",
+          "target": 80
+        }
+      ],
+      "volumes": [
+        {
+          "source": "dbdata",
+          "target": "/var/lib/data",
+          "type": "volume",
+          "volume": {}
+        },
+        {
+          "bind": {
+            "create_host_path": true
+          },
+          "read_only": true,
+          "source": "/projects/app/landing",
+          "target": "/usr/share/nginx/html",
+          "type": "bind"
+        }
+      ]
+    }
+  },
+  "volumes": {
+    "dbdata": {
+      "name": "safe-read-fixture_dbdata"
+    }
+  }
+}

@@ -2,14 +2,11 @@
   "name": "mixed-case-fixture",
   "networks": {
     "default": {
-      "name": "mixed-case-fixture_default",
-      "ipam": {}
+      "name": "mixed-case-fixture_default"
     }
   },
   "services": {
     "legacy": {
-      "command": null,
-      "entrypoint": null,
       "image": "myapp:legacy",
       "labels": {
         "TRAEFIK.HTTP.ROUTERS.LEGACY.RULE": "Host(`legacy.example.com`)",

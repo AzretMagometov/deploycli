@@ -1,0 +1,34 @@
+{
+  "name": "placeholder-port-fixture",
+  "networks": {
+    "default": {
+      "name": "placeholder-port-fixture_default"
+    }
+  },
+  "services": {
+    "api": {
+      "image": "nginx:1.27",
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "protocol": "tcp",
+          "published": "${API_PORT}",
+          "target": 3000
+        }
+      ]
+    },
+    "web": {
+      "image": "nginx:1.27",
+      "networks": {
+        "default": null
+      },
+      "ports": [
+        "${DEV_PORT}:3000",
+        "8080:80"
+      ]
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "name": "image-forms-fixture",
+  "networks": {
+    "default": {
+      "name": "image-forms-fixture_default"
+    }
+  },
+  "services": {
+    "digest": {
+      "image": "nginx@sha256:0c1f1e9ba2ba0ba8f7f0bd12fd3f1e1c3a8b2f4d5e6a7b8c9d0e1f2a3b4c5d6e",
+      "networks": {
+        "default": null
+      }
+    },
+    "no-tag": {
+      "image": "nginx",
+      "networks": {
+        "default": null
+      }
+    },
+    "registry-placeholder": {
+      "image": "${IMAGE_REGISTRY:-reg.example.com}/nginx:1.27",
+      "networks": {
+        "default": null
+      }
+    },
+    "registry-with-port": {
+      "image": "reg.example.com:5000/myapp",
+      "networks": {
+        "default": null
+      }
+    },
+    "required-tag-placeholder": {
+      "image": "${IMAGE_REGISTRY:-reg.example.com}/myapp:${APP_TAG:?задайте тег}",
+      "networks": {
+        "default": null
+      }
+    },
+    "tag-placeholder": {
+      "image": "myapp:${APP_TAG:-latest}",
+      "networks": {
+        "default": null
+      }
+    }
+  }
+}
