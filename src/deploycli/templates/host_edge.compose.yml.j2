@@ -1,0 +1,37 @@
+# Край хоста: единственный обратный прокси машины (ADR-002).
+# Сеть, точки входа, редирект и резолвер сертификатов — константы контракта
+# с хостом (ADR-003): подключённые проекты ссылаются на них метками.
+name: {{ project }}
+
+services:
+  {{ service }}:
+    image: {{ image }}
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network={{ network }}
+      - --entrypoints.{{ entrypoint_http }}.address=:80
+      - --entrypoints.{{ entrypoint_http }}.http.redirections.entryPoint.to={{ entrypoint_https }}
+      - --entrypoints.{{ entrypoint_http }}.http.redirections.entryPoint.scheme=https
+      - --entrypoints.{{ entrypoint_http }}.http.redirections.entryPoint.permanent=true
+      - --entrypoints.{{ entrypoint_https }}.address=:443
+      - --certificatesresolvers.{{ resolver }}.acme.email={{ acme_email }}
+      - --certificatesresolvers.{{ resolver }}.acme.storage={{ acme_storage }}
+      - --certificatesresolvers.{{ resolver }}.acme.httpchallenge=true
+      - --certificatesresolvers.{{ resolver }}.acme.httpchallenge.entrypoint={{ entrypoint_http }}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - {{ acme_volume }}:{{ acme_storage_dir }}
+    networks:
+      - {{ network }}
+
+networks:
+  {{ network }}:
+    external: true
+
+volumes:
+  {{ acme_volume }}:
