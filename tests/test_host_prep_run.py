@@ -271,6 +271,25 @@ def test_machine_without_apt_refuses_before_touching_anything(tmp_path: Path) ->
     assert "apt-get" in result.stderr
 
 
+def test_missing_docker_group_stops_the_run_instead_of_a_user_outside_it(tmp_path: Path) -> None:
+    # Группу docker заводит сам пакет docker; её отсутствие — состояние, в
+    # котором деплой-пользователь до демона не дотянется, а тихо оставить
+    # его снаружи группы подготовка не может.
+    result = _run(tmp_path, docker_group=False, deploy_user_groups=("deploy",))
+
+    assert result.returncode != 0
+    assert "docker" in result.stderr
+    assert not result.called("usermod")
+
+
+def test_unreadable_os_release_stops_the_install_before_apt(tmp_path: Path) -> None:
+    result = _run(tmp_path, docker=False, os_codename=None)
+
+    assert result.returncode != 0
+    assert "os-release" in result.stderr
+    assert result.calls_of("apt-get") == ()
+
+
 def test_all_refusals_are_reported_in_one_run(tmp_path: Path) -> None:
     result = _run(tmp_path, root=False, network_driver="macvlan", deploy_user_sudo=True)
 
@@ -290,6 +309,9 @@ def test_edge_flag_raises_the_edge_from_the_shared_template(tmp_path: Path) -> N
     assert result.returncode == 0, result.stderr
     assert render_host_edge_compose(ACME_EMAIL) in written
     assert _edge_raised(result)
+    # Запуск края обязан попасть в список изменений прогона: иначе проверки
+    # «отказ ничего не изменил» в этом файле были бы слепы к нему.
+    assert any(call.command == "docker" for call in result.mutations)
 
 
 def test_edge_compose_is_installed_next_to_nothing_else(tmp_path: Path) -> None:
@@ -353,6 +375,23 @@ def test_stopped_edge_with_current_compose_is_started_again(tmp_path: Path) -> N
     result = _run(tmp_path, with_edge=True, edge_compose="current", edge_running=False)
 
     assert _edge_raised(result)
+
+
+def test_script_survives_delivery_through_stdin(tmp_path: Path) -> None:
+    # Настоящий канал доставки — 'ssh <хост> sudo bash -s': текст скрипта
+    # приходит по stdin, и потомок, читающий stdin, съел бы его остаток.
+    # Тело целиком лежит в main, поэтому bash разбирает его до первой команды.
+    result = run_script(
+        _script(with_edge=True),
+        tmp_path,
+        machine(edge_compose="current", edge_running=True),
+        through_stdin=True,
+    )
+    written = [path.read_text() for path in result.written]
+
+    assert result.returncode == 0, result.stderr
+    assert "Изменений нет" in result.stdout
+    assert render_host_edge_compose(ACME_EMAIL) in written
 
 
 # --- отчёт о гигиене ---------------------------------------------------------

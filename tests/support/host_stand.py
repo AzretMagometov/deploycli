@@ -64,9 +64,17 @@ _STUBBED = frozenset(
 """Поверхность машины: команды, которые сообщают её состояние или меняют его."""
 
 MUTATING = frozenset({"apt-get", "chmod", "chown", "curl", "install", "tee", "useradd", "usermod"})
-"""Команды, меняющие машину; у ``docker`` меняющие подкоманды названы ниже."""
+"""Команды, меняющие машину целиком, каким бы аргументом их ни позвали."""
 
-MUTATING_DOCKER = ("network create", "network rm", "compose up", "compose down", "run", "start")
+_MUTATING_SUBCOMMANDS = {
+    "docker": {"run", "start", "stop", "rm", "compose", "network"},
+    "systemctl": {"enable", "start", "stop", "restart", "disable", "daemon-reload"},
+    "ufw": {"enable", "disable", "allow", "deny", "reset"},
+}
+_READ_ONLY_SUBCOMMANDS = {
+    ("docker", "compose"): {"version", "config", "ls", "ps"},
+    ("docker", "network"): {"inspect", "ls"},
+}
 
 _WANT_HASH = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
 _STALE_HASH = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
@@ -135,20 +143,32 @@ class RunResult:
     @property
     def mutations(self) -> tuple[Call, ...]:
         """Вызовы, изменившие машину: установка, заведение, запуск, запись."""
-        return tuple(
-            call
-            for call in self.calls
-            if call.command in MUTATING
-            or (
-                call.command == "docker"
-                and any(" ".join(call.args).startswith(sub) for sub in MUTATING_DOCKER)
-            )
-        )
+        return tuple(call for call in self.calls if is_mutating(call))
 
     @property
     def written(self) -> tuple[Path, ...]:
         """Файлы, собранные скриптом через ``mktemp``: их читает тест."""
         return tuple(sorted((self.workdir / "mktemp").iterdir()))
+
+
+def is_mutating(call: Call) -> bool:
+    """Изменил ли вызов машину.
+
+    Разбор идёт по словам вызова, а не по началу строки: у ``docker
+    compose`` между подкомандой и глаголом стоит ``-f <файл>``, и
+    сравнение с началом строки пропустило бы настоящий запуск края.
+    """
+    if call.command in MUTATING:
+        return True
+    subcommands = _MUTATING_SUBCOMMANDS.get(call.command)
+    if subcommands is None or not call.args:
+        return False
+    if call.args[0] not in subcommands:
+        return False
+    read_only = _READ_ONLY_SUBCOMMANDS.get((call.command, call.args[0]))
+    if read_only is None:
+        return True
+    return not read_only & set(call.args)
 
 
 def listener(port: int, process: str = "docker-proxy") -> str:
@@ -338,8 +358,15 @@ def _name(name: str, shown: bool) -> str:
     return f"{name}\n" if shown else ""
 
 
-def run_script(script: str, workdir: Path, scenario: Machine | None = None) -> RunResult:
-    """Исполняет текст скрипта настоящим bash на заглушённой машине."""
+def run_script(
+    script: str, workdir: Path, scenario: Machine | None = None, *, through_stdin: bool = False
+) -> RunResult:
+    """Исполняет текст скрипта настоящим bash на заглушённой машине.
+
+    ``through_stdin`` повторяет настоящий способ доставки — ``bash -s``,
+    текст скрипта приходит по stdin. Он опаснее запуска из файла: потомок,
+    читающий stdin, съел бы остаток скрипта.
+    """
     target = scenario if scenario is not None else machine()
     rules = dict(target.commands)
     stub_dir = workdir / "bin"
@@ -373,15 +400,27 @@ def run_script(script: str, workdir: Path, scenario: Machine | None = None) -> R
 
     script_path = workdir / "prepare-host.sh"
     script_path.write_text(script)
-    completed = subprocess.run(
-        [BASH, str(script_path)],
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        cwd=workdir,
-        env={"PATH": str(stub_dir), "HOME": str(workdir), "DPC_STUB_LOG": str(log), "LC_ALL": "C"},
-        check=False,
-    )
+    env = {"PATH": str(stub_dir), "HOME": str(workdir), "DPC_STUB_LOG": str(log), "LC_ALL": "C"}
+    if through_stdin:
+        completed = subprocess.run(
+            [BASH, "-s"],
+            input=script,
+            capture_output=True,
+            text=True,
+            cwd=workdir,
+            env=env,
+            check=False,
+        )
+    else:
+        completed = subprocess.run(
+            [BASH, str(script_path)],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            cwd=workdir,
+            env=env,
+            check=False,
+        )
     return RunResult(
         returncode=completed.returncode,
         stdout=completed.stdout,
